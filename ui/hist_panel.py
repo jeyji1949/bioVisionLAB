@@ -221,13 +221,7 @@ class HistPanel(tk.Frame):
         self.hist_title.config(text=title)
 
     def _on_op_change(self, *_):
-        self.interp_lbl.config(text=BIO_INTERP.get(self.op_var.get(), "—"))
-        self.state.m2_log = {
-            "operation": op,
-            "bins": bins,
-            "seuil": self.thresh_var.get() if op == "threshold" else "—",
-            **{k: stats.get(k, "—") for k in ["min","max","mean","std","entropy"]},
-        }
+         self.interp_lbl.config(text=BIO_INTERP.get(self.op_var.get(), "—"))
 
     def run(self):
         if not self.state.has_image():
