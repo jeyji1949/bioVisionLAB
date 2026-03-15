@@ -233,5 +233,3 @@ H = -Σ p(i) · log₂(p(i))   [bits]
 ## Auteur
 
 **Jihane El Khraibi**  
-Master BIAM — Bioinformatique et Intelligence Artificielle pour la Médecine de Précision  
-Faculté des Sciences Dhar El Mahraz, Fès, Maroc
