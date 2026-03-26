@@ -1,20 +1,19 @@
 # BioVision Lab
 
-> Pipeline d'analyse d'image microscopique
+> Pipeline d'analyse d'image microscopique   
 > Bioinformatique & IA pour la Médecine de Précision  
-
 
 ---
 
 ## Description
 
-BioVision Lab est une application desktop **Python/Tkinter** de traitement d'image médicale et microscopique. Elle implémente un pipeline d'analyse biologique en **4 modules séquentiels**, avec tous les algorithmes codés **manuellement en NumPy** — sans OpenCV, scipy.ndimage, ni aucune bibliothèque de traitement d'image haut niveau.
+BioVision Lab est une application desktop **Python/Tkinter** de traitement d'image médicale et microscopique. Elle implémente un pipeline d'analyse biologique en **6 étapes séquentielles**, avec tous les algorithmes codés **manuellement en NumPy** — sans OpenCV, scipy.ndimage, ni aucune bibliothèque de traitement d'image haut niveau.
 
-L'interface est organisée comme un vrai workflow d'analyse cellulaire : chaque étape produit un résultat qui devient l'entrée de l'étape suivante.
+L'interface est organisée comme un vrai workflow d'analyse cellulaire : chaque étape produit un résultat qui devient l'entrée de l'étape suivante, jusqu'à un rapport final généré par intelligence artificielle.
 
 ---
 
-## Pipeline
+## Pipeline complet
 
 ```
 Image microscopique
@@ -23,24 +22,42 @@ Image microscopique
 ┌─────────────────────────────────────────────────────┐
 │  Étape 01 — Prétraitement & Débruitage  (M1)        │
 │  Bruit S&P / Gaussien → Filtre médian / gaussien    │
+│  Recommandation automatique filtre selon bruit      │
 └─────────────────────┬───────────────────────────────┘
                       │
                       ▼
 ┌─────────────────────────────────────────────────────┐
 │  Étape 02 — Histogramme & Contraste     (M2)        │
 │  Étirement · Égalisation · Seuillage                │
+│  Statistiques + visualisation matplotlib            │
 └─────────────────────┬───────────────────────────────┘
                       │
                       ▼
 ┌─────────────────────────────────────────────────────┐
 │  Étape 03 — Transformée de Fourier      (M3)        │
-│  FFT Cooley-Tukey 2D · Passe-bas/haut/bande         │
+│  FFT Cooley-Tukey 2D from scratch                   │
+│  Passe-bas · Passe-haut · Passe-bande               │
 └─────────────────────┬───────────────────────────────┘
                       │
                       ▼
 ┌─────────────────────────────────────────────────────┐
 │  Étape 04 — Morphologie & Segmentation  (M4)        │
-│  Érosion · Dilatation · Comptage cellulaire         │
+│  Érosion · Dilatation · Opening · Closing           │
+│  Top Hat · Black Hat · Gradient · Comptage          │
+└─────────────────────┬───────────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────────────┐
+│  Étape 05 — Rapport d'analyse                       │
+│  Résumé des 4 étapes · Statistiques comparées       │
+│  Comparaison avant/après · Bilan global             │
+└─────────────────────┬───────────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────────────┐
+│  Étape 06 — IA & Prédiction                         │
+│  Chat interactif · Identification type d'image      │
+│  Rapport médical · Suggestions d'amélioration       │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -48,69 +65,121 @@ Image microscopique
 
 ## Fonctionnalités
 
-### Module 1 — Prétraitement
+### Module 1 — Prétraitement (`core/filters.py`)
 
-| Opération | Description |
-|-----------|-------------|
-| Bruit Poivre & Sel | Pixels aléatoires blancs/noirs (boucle manuelle) |
-| Bruit Gaussien | Box-Muller transform, pixel par pixel |
-| Filtre Médian | Tri de fenêtre glissante, sans bibliothèque |
-| Filtre Gaussien | Noyau analytique + convolution 2D manuelle |
-| Filtre Moyenneur | Convolution avec noyau uniforme |
-| Filtre Laplacien | Noyau `[[0,-1,0],[-1,4,-1],[0,-1,0]]` |
+| Opération | Description | Usage microscopique |
+|-----------|-------------|---------------------|
+| Bruit Poivre & Sel | Pixels aléatoires 0/255 (boucle manuelle) | Simulation capteur CCD défectueux |
+| Bruit Gaussien | Box-Muller transform, pixel par pixel | Simulation bruit thermique |
+| Filtre Médian | Tri de fenêtre glissante, sans bibliothèque | Éliminer S&P sans flouter les contours |
+| Filtre Gaussien | Noyau analytique + convolution 2D manuelle | Lisser le bruit continu (fluorescence) |
+| Filtre Moyenneur | Convolution avec noyau uniforme | Lissage rapide, prévisualisation |
+| Filtre Laplacien | Noyau `[[0,-1,0],[-1,4,-1],[0,-1,0]]` | Détecter membranes et filaments |
 
-**Recommandation automatique** : sélection de Poivre & Sel → filtre médian pré-sélectionné. Bruit Gaussien → filtre gaussien.  
-**Affichage** : 3 panneaux côte à côte — image originale | image bruitée | image filtrée.
-
----
-
-### Module 2 — Histogramme
-
-| Opération | Formule |
-|-----------|---------|
-| Histogramme | Comptage manuel par boucle, bins ajustables (16–256) |
-| Étirement de contraste | `out = (I - min) / (max - min) × 255` |
-| Égalisation | Méthode CDF : `T(r) = round((L-1) × CDF(r) / N)` |
-| Seuillage binaire | `out = 255 si I ≥ seuil, sinon 0` |
-
-**Statistiques calculées** : min, max, moyenne, écart-type, entropie de Shannon (bits).  
-**Visualisation** : histogramme matplotlib intégré en bas de l'interface.
+**Recommandation automatique** : Poivre & Sel → filtre médian pré-sélectionné (badge vert). Bruit Gaussien → filtre gaussien.  
+**Affichage** : 3 panneaux — image originale | image bruitée | image filtrée.
 
 ---
 
-### Module 3 — Transformée de Fourier
+### Module 2 — Histogramme (`core/histogram.py`)
 
-Implémentation **100% from scratch** de l'algorithme FFT Cooley-Tukey radix-2 :
+| Opération | Formule | Usage microscopique |
+|-----------|---------|---------------------|
+| Histogramme | Comptage manuel par boucle, bins 16–256 | Diagnostiquer l'exposition |
+| Étirement de contraste | `(I - min) / (max - min) × 255` | Corriger image pâle |
+| Égalisation | CDF : `T(r) = round((L-1) × CDF(r) / N)` | Révéler détails cachés (fluorescence) |
+| Seuillage binaire | `255 si I ≥ seuil, sinon 0` | Préparer la segmentation |
+
+**Statistiques** : min, max, moyenne, écart-type, entropie de Shannon (bits).  
+**Interprétation biologique** affichée automatiquement pour chaque opération.
+
+---
+
+### Module 3 — Transformée de Fourier (`core/fft_manual.py`)
+
+Implémentation **100% from scratch** — aucune utilisation de `numpy.fft` :
 
 ```
-fft1d()   — Bit-reversal permutation + butterfly O(N log N)
-fft2d()   — Décomposition ligne/colonne
-ifft2d()  — FFT inverse pour reconstruction
-fft_shift() — Centrage des basses fréquences
+fft1d()               — Bit-reversal + butterfly O(N log N)
+fft2d()               — Décomposition ligne/colonne
+ifft2d()              — FFT inverse pour reconstruction
+fft_shift()           — Centrage des basses fréquences
+apply_frequency_mask()— Masques circulaires passe-bas/haut/bande
+spectrum_image()      — Visualisation spectre (log scale)
 ```
 
-| Filtre | Application biologique |
-|--------|------------------------|
-| Spectre de magnitude | Visualiser les fréquences dominantes (log scale) |
-| Passe-bas (rayon R) | Éliminer le bruit haute fréquence, adoucir l'image |
-| Passe-haut (rayon R) | Renforcer les contours cellulaires, détecter les membranes |
-| Passe-bande | Isoler une plage de textures — séparer noyau du cytoplasme |
+| Filtre | Rayon conseillé | Usage microscopique |
+|--------|-----------------|---------------------|
+| Spectre | — | Diagnostiquer artéfacts périodiques |
+| Passe-bas | R = 20–40 | Lisser bruit haute fréquence |
+| Passe-haut | R = 20–40 | Renforcer contours, détecter membranes |
+| Passe-bande | R = 15–30 | Isoler granules, séparer noyau/cytoplasme |
 
 ---
 
-### Module 4 — Morphologie
+### Module 4 — Morphologie (`core/morpho.py`)
 
-| Opération | Usage biologique |
-|-----------|-----------------|
-| Érosion | Séparer les cellules jointives |
-| Dilatation | Fermer les lacunes membranaires |
-| Opening | Supprimer le bruit binaire sans déformer les cellules |
-| Closing | Reconstruire les noyaux fragmentés |
-| Top Hat | Extraire les granules cytoplasmiques |
-| Black Hat | Détecter les vacuoles et inclusions |
-| Gradient | Tracer les membranes cellulaires |
+| Opération | Formule | Usage microscopique |
+|-----------|---------|---------------------|
+| Érosion | `min` voisinage 3×3 | Séparer cellules jointives |
+| Dilatation | `max` voisinage 3×3 | Fermer lacunes membranaires |
+| Opening | `Dilate(Erode(A))` | Supprimer bruit binaire avant comptage |
+| Closing | `Erode(Dilate(A))` | Reconstruire noyaux fragmentés |
+| Top Hat | `A - Opening(A)` | Extraire granules cytoplasmiques |
+| Black Hat | `Closing(A) - A` | Détecter vacuoles et inclusions |
+| Gradient | `Dilate(A) - Erode(A)` | Tracer membranes cellulaires |
 
-**Comptage automatique** : flood fill 4-connexe → nombre d'objets + aire moyenne en px².
+**Comptage** : flood fill 4-connexe → nombre d'objets + aire moyenne en px².  
+**Rapport** : bouton "Générer rapport complet" → bilan de l'analyse.
+
+---
+
+### Module 5 — Rapport d'analyse (`ui/report_panel.py`)
+
+Panel de synthèse automatique à la fin du pipeline :
+
+- **Comparaison visuelle** : image originale vs résultat final côte à côte
+- **Résumé des 4 étapes** : opération + paramètres + interprétation biologique par module
+- **Statistiques comparées** : tableau min/max/moyenne/écart-type/entropie à chaque étape
+- **Histogrammes comparés** : original vs résultat final
+- **Bilan global** : 4 métriques clés + interprétation textuelle automatique avec recommandations
+
+Se rafraîchit automatiquement à chaque navigation vers l'étape 05.
+
+---
+
+### Module 6 — IA & Prédiction (`ui/ai_panel.py`)
+
+Chat interactif avec un LLM analysant les résultats du pipeline :
+
+**L'IA reçoit automatiquement :** toutes les statistiques, les paramètres utilisés, les logs de chaque module et les résultats de comptage cellulaire.
+
+**5 analyses rapides disponibles :**
+- Analyser le pipeline complet
+- Identifier le type d'image biologique
+- Suggérer des améliorations
+- Générer un rapport médical complet
+- Évaluer la qualité du traitement
+
+**Fournisseurs supportés :**
+
+| Fournisseur | Modèle par défaut | Coût |
+|-------------|-------------------|------|
+| OpenRouter (recommandé) | `arcee-ai/trinity-large-preview:free` | Gratuit |
+| Gemini Flash (Google) | `gemini-2.0-flash` | Gratuit (15 req/min) |
+| Claude (Anthropic) | `claude-haiku-4-5-20251001` | Payant |
+
+**Modèles gratuits OpenRouter** (une seule clé `sk-or-v1-...` pour tous) :
+
+```
+arcee-ai/trinity-large-preview:free      ← recommandé, fonctionne bien
+meta-llama/llama-3.2-3b-instruct:free
+google/gemma-3-4b-it:free
+google/gemma-3-12b-it:free
+mistralai/mistral-small-3.1-24b-instruct:free
+qwen/qwen-2.5-72b-instruct:free
+deepseek/deepseek-r1:free
+```
 
 ---
 
@@ -123,28 +192,27 @@ biovision_lab/
 ├── requirements.txt
 │
 ├── app/
-│   ├── state.py                # AppState partagé entre modules
-│   └── main_window.py          # Fenêtre principale + barre pipeline
+│   ├── state.py                # AppState : pixels, logs M1-M4, steps_done[6]
+│   └── main_window.py          # Fenêtre principale + barre pipeline 6 étapes
 │
-├── core/                       # Algorithmes purs — zéro tkinter
-│   ├── histogram.py            # to_grayscale, compute_histogram, stretch,
-│   │                           # equalize, threshold, image_stats
-│   ├── filters.py              # convolve2d, mean, gaussian, median,
-│   │                           # laplacian, add_salt_pepper, add_gaussian_noise
-│   ├── fft_manual.py           # fft1d (Cooley-Tukey), fft2d, ifft2d,
-│   │                           # fft_shift, apply_frequency_mask, spectrum_image
-│   └── morpho.py               # erode, dilate, opening, closing,
-│                               # top_hat, black_hat, morpho_gradient, run_morpho
+├── core/                       # Algorithmes purs — zéro tkinter, zéro OpenCV
+│   ├── histogram.py
+│   ├── filters.py
+│   ├── fft_manual.py
+│   └── morpho.py
 │
-├── ui/                         # Panels Tkinter — appellent core/
-│   ├── filter_panel.py         # M1 : 3 panneaux + sidebar contrôles
-│   ├── hist_panel.py           # M2 : 2 images + histogramme matplotlib
-│   ├── fourier_panel.py        # M3 : source | spectre | IFFT
-│   └── morpho_panel.py         # M4 : 2 panneaux + rapport cellulaire
+├── ui/                         # Panels Tkinter
+│   ├── filter_panel.py         # M1
+│   ├── hist_panel.py           # M2
+│   ├── fourier_panel.py        # M3
+│   ├── morpho_panel.py         # M4
+│   ├── report_panel.py         # M5 — rapport synthèse
+│   └── ai_panel.py             # M6 — chat IA multi-fournisseurs
 │
 └── assets/
-    ├── guide_utilisation.docx  # Guide d'utilisation complet
-    └── samples/                # Images de test
+    ├── guide_utilisation.docx
+    ├── README.docx
+    └── samples/
 ```
 
 ### Règle de dépendance
@@ -153,7 +221,19 @@ biovision_lab/
 main.py → app/main_window.py → ui/*_panel.py → core/*.py
 ```
 
-`core/` ne contient **jamais** `import tkinter`. Les fonctions prennent un `np.ndarray` et retournent un `np.ndarray`.
+`core/` ne contient **jamais** `import tkinter`. Le module IA utilise uniquement `urllib` (stdlib).
+
+### AppState — pipeline de données
+
+```python
+AppState
+├── original_pixels              # Image source
+├── m1_result / m2_result / m3_result / m4_result
+├── m1_log / m2_log / m3_log / m4_log   # Paramètres de chaque module
+└── steps_done[6]                # Flags de complétion
+
+pipeline_input(step)  # remonte automatiquement la meilleure entrée disponible
+```
 
 ---
 
@@ -163,7 +243,7 @@ main.py → app/main_window.py → ui/*_panel.py → core/*.py
 # Prérequis : Python 3.8+
 pip install numpy pillow matplotlib
 
-# Lancer l'application
+# Lancer
 python main.py
 ```
 
@@ -171,62 +251,70 @@ python main.py
 
 | Package | Usage | Version |
 |---------|-------|---------|
-| `numpy` | Tableaux — base de tous les algorithmes | ≥ 1.20 |
-| `pillow` | Chargement et affichage des images | ≥ 9.0 |
-| `matplotlib` | Histogramme dans le Module 2 | ≥ 3.5 |
+| `numpy` | Base de tous les algorithmes | ≥ 1.20 |
+| `pillow` | Chargement et affichage images | ≥ 9.0 |
+| `matplotlib` | Histogramme M2 | ≥ 3.5 |
 | `tkinter` | Interface graphique | stdlib |
+| `urllib` | Appels API IA (M6) | stdlib |
 
 ---
 
 ## Utilisation rapide
 
-1. Lancer `python main.py`
-2. Cliquer **"Charger un échantillon"** — sélectionner une image PNG/JPG/TIFF
-3. Naviguer entre les 4 étapes via la **barre pipeline** en haut
-4. Dans chaque module, configurer les paramètres dans la sidebar gauche
-5. Cliquer **"Appliquer"** / **"Calculer"** pour exécuter
-6. Cliquer **"Envoyer vers →"** pour passer l'image au module suivant
-7. En M4, cliquer **"Générer rapport complet"** pour le bilan d'analyse
+1. `python main.py`
+2. **"Charger un échantillon"** → PNG/JPG/TIFF
+3. **Étape 01** : choisir bruit → filtre recommandé s'active → Appliquer
+4. **Étape 02** : choisir opération → Calculer
+5. **Étape 03** : choisir filtre → Calculer FFT
+6. **Étape 04** : choisir opération morpho → Appliquer → voir comptage
+7. **Étape 05** : cliquer "Actualiser" → rapport synthèse
+8. **Étape 06** : entrer clé OpenRouter → analyses rapides IA
+
+### Obtenir une clé API gratuite (module IA)
+
+1. [openrouter.ai](https://openrouter.ai) → créer un compte
+2. **Keys** → **Create Key**
+3. Clé `sk-or-v1-...` → coller dans la sidebar Étape 06
+4. Une seule clé = accès à tous les modèles gratuits
 
 ### Types d'images recommandées
 
-- Coupes histologiques (HES, Giemsa, Gram)
-- Microscopie optique (champ clair, contraste de phase)
-- Images de fluorescence en niveaux de gris (DAPI, GFP)
-- Images bactériologiques (cultures, frottis sanguin)
-- Résolution conseillée : **256×256 à 1024×1024 px**
+| Type | Format | Résolution |
+|------|--------|------------|
+| Coupes histologiques (HES, Giemsa) | PNG, TIFF | 512×512 à 1024×1024 |
+| Microscopie optique | PNG, JPG | 256×256 à 512×512 |
+| Fluorescence (DAPI, GFP) | TIFF, PNG | 512×512 |
+| Images bactériologiques | PNG, JPG | 256×256 à 512×512 |
 
-> ⚠️ Les images très grandes (> 2000 px) ralentissent significativement les algorithmes manuels. Préférer un recadrage avant traitement.
+> ⚠️ Images > 2000 px : recadrer avant traitement (FFT très lente).
 
 ---
 
 ## Formules implémentées
 
 ```python
-# Niveaux de gris
-Y = 0.299·R + 0.587·G + 0.114·B
-
-# Étirement de contraste
-out(x,y) = (I(x,y) - Imin) / (Imax - Imin) × 255
-
-# Égalisation (CDF)
-T(r) = round((L-1) × CDF(r) / N)
-
-# Noyau gaussien
-G(x,y) = exp(-(x² + y²) / 2σ²) / (2πσ²)
-
-# Laplacien
-K = [[0,-1,0], [-1,4,-1], [0,-1,0]]
-
-# FFT Cooley-Tukey (butterfly)
-X[k] = Σ x[n] · e^(-j2πkn/N)   avec bit-reversal + O(N log N)
-
-# Top Hat
-TH(I) = I - Opening(I)
-
-# Entropie Shannon
-H = -Σ p(i) · log₂(p(i))   [bits]
+Y = 0.299·R + 0.587·G + 0.114·B                    # niveaux de gris
+out = (I - Imin) / (Imax - Imin) × 255             # étirement
+T(r) = round((L-1) × CDF(r) / N)                   # égalisation
+G(x,y) = exp(-(x²+y²) / 2σ²) / (2πσ²)             # noyau gaussien
+K = [[0,-1,0], [-1,4,-1], [0,-1,0]]                # laplacien
+z = √(-2·ln(u1)) × cos(2π·u2)                      # Box-Muller
+X[k] = Σ x[n]·e^(-j2πkn/N)  O(N log N)            # FFT Cooley-Tukey
+Erode  = min { A(x+i, y+j) | (i,j) ∈ B }          # érosion
+Dilate = max { A(x+i, y+j) | (i,j) ∈ B }          # dilatation
+TH(I) = I - Opening(I)                              # top hat
+H = -Σ p(i)·log₂(p(i))                             # entropie Shannon
 ```
+
+---
+
+## Documents
+
+| Fichier | Contenu |
+|---------|---------|
+| `assets/guide_utilisation.docx` | Guide complet avec scénarios biologiques |
+| `assets/README.docx` | Documentation Word |
+| `explication_algorithmes.pdf` | Explication ligne par ligne de chaque algorithme |
 
 ---
 
