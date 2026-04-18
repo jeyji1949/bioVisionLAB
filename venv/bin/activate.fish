@@ -33,7 +33,7 @@ end
 # Unset irrelevant variables.
 deactivate nondestructive
 
-set -gx VIRTUAL_ENV /home/aphrodite/Documents/BIAM/Timage/biovision_lab/venv
+set -gx VIRTUAL_ENV /home/aphrodite/Documents/BIAM/S1/Timage/biovision_lab/venv
 
 set -gx _OLD_VIRTUAL_PATH $PATH
 set -gx PATH "$VIRTUAL_ENV/"bin $PATH

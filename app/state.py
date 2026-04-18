@@ -14,6 +14,7 @@ class AppState:
     m2_result: np.ndarray = field(default=None)
     m3_result: np.ndarray = field(default=None)
     m4_result: np.ndarray = field(default=None)
+    mc_results: object = field(default=None) 
 
     m1_log: dict = field(default_factory=dict)
     m2_log: dict = field(default_factory=dict)
@@ -45,6 +46,7 @@ class AppState:
         self.m2_result = None
         self.m3_result = None
         self.m4_result = None
+        self.mc_results = None
         self.m1_log = {}
         self.m2_log = {}
         self.m3_log = {}

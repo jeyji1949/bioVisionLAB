@@ -3,6 +3,8 @@ import numpy as np
 from PIL import Image, ImageTk
 
 from core.histogram import image_stats
+from core.cell_classifier import CellClassifier, classifier_context_block
+
 
 WHITE   = "#FFFFFF"
 BG      = "#F4F6F9"
@@ -130,6 +132,14 @@ class ReportPanel(tk.Frame):
         for w in self._sf.winfo_children():
             w.destroy()
 
+        # ── Module C — run cell classifier ────────────────────────────────────
+        if self.state.m4_result is not None:
+            clf = CellClassifier(n_clusters=3)
+            self.state.mc_results = clf.run(
+                self.state.m4_result,
+                self.state.original_pixels
+            )
+
         sf = self._sf
 
         # ── Comparaison visuelle ───────────────────────────────────────────────
@@ -197,6 +207,11 @@ class ReportPanel(tk.Frame):
         ]:
             self._step_card(sf, num, name, c, bgc, bool(log), rows)
 
+        # ── Module C — Analyse cellulaire ─────────────────────────────────────
+        if hasattr(self.state, "mc_results") and self.state.mc_results:
+            self._section(sf, "Analyse cellulaire — Module C (k-means)")
+            self._mc_card(sf, self.state.mc_results)
+
         # ── Bilan global ──────────────────────────────────────────────────────
         self._section(sf, "Bilan global")
         self._global_card(sf)
@@ -255,6 +270,64 @@ class ReportPanel(tk.Frame):
                          font=("Helvetica", 8),
                          anchor="w", wraplength=500).grid(
                              row=0, column=2, padx=(8, 8), pady=5, sticky="w")
+
+    def _mc_card(self, parent, results):
+        C_MC  = "#6C47CC"
+        C_MCL = "#F0EDFB"
+
+        card = tk.Frame(parent, bg=WHITE,
+                        highlightbackground=C_MC, highlightthickness=2)
+        card.pack(fill="x", padx=16, pady=(0, 10))
+
+        hdr = tk.Frame(card, bg=C_MCL, height=38)
+        hdr.pack(fill="x")
+        hdr.pack_propagate(False)
+        tk.Label(hdr, text="Classification cellulaire (k-means from scratch)",
+                 bg=C_MCL, fg=C_MC,
+                 font=("Helvetica", 10, "bold")).pack(side="left", padx=14, pady=6)
+        tk.Label(hdr,
+                 text=f"{results['n_objects']} objets · {results['n_clusters']} clusters",
+                 bg=C_MCL, fg=C_MC,
+                 font=("Helvetica", 9)).pack(side="right", padx=12)
+
+        body = tk.Frame(card, bg=WHITE)
+        body.pack(fill="x", padx=14, pady=10)
+        body.columnconfigure((0, 1, 2, 3), weight=1, uniform="mc")
+
+        labels_fr = {
+            "nucleus":   "Noyaux",
+            "cytoplasm": "Cytoplasme",
+            "debris":    "Débris",
+            "uncertain": "Incertain",
+        }
+        colors = {
+            "nucleus":   "#1A6FBF",
+            "cytoplasm": "#1A8754",
+            "debris":    "#C0393B",
+            "uncertain": "#9BA5B8",
+        }
+
+        for col, ctype in enumerate(["nucleus", "cytoplasm", "debris", "uncertain"]):
+            count = results["summary"][ctype]
+            pct   = results["summary_pct"][ctype]
+            c     = colors[ctype]
+            f = tk.Frame(body, bg=BG)
+            f.grid(row=0, column=col, sticky="ew",
+                   padx=(0 if col == 0 else 4, 4 if col < 3 else 0))
+            tk.Label(f, text=labels_fr[ctype], bg=BG, fg=TEXT3,
+                     font=("Helvetica", 8)).pack(pady=(8, 2))
+            tk.Label(f, text=str(count), bg=BG, fg=c,
+                     font=("Helvetica", 16, "bold")).pack()
+            tk.Label(f, text=f"{pct}%", bg=BG, fg=c,
+                     font=("Helvetica", 9)).pack(pady=(0, 8))
+
+        tk.Frame(card, bg=BORDER, height=1).pack(fill="x", padx=14)
+        tk.Label(card,
+                 text=f"Inertie k-means : {results['inertia']}  ·  "
+                      f"Variance PCA : PC1={results['pca_variance'][0]:.1f}%  "
+                      f"PC2={results['pca_variance'][1]:.1f}%",
+                 bg=WHITE, fg=TEXT3,
+                 font=("Helvetica", 8)).pack(anchor="w", padx=14, pady=6)
 
     def _global_card(self, parent):
         pix = self._best()
