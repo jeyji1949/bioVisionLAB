@@ -7,9 +7,9 @@
 
 ## Description
 
-BioVision Lab est une application desktop **Python/Tkinter** de traitement d'image médicale et microscopique. Elle implémente un pipeline d'analyse biologique en **6 étapes séquentielles**, avec tous les algorithmes codés **manuellement en NumPy** — sans OpenCV, scipy.ndimage, ni aucune bibliothèque de traitement d'image haut niveau.
+BioVision Lab est une application desktop **Python/Tkinter** de traitement d'image médicale et microscopique. Elle implémente un pipeline d'analyse biologique en **7 étapes séquentielles**, avec tous les algorithmes codés **manuellement en NumPy** — sans OpenCV, scipy.ndimage, ni aucune bibliothèque de traitement d'image haut niveau.
 
-L'interface est organisée comme un vrai workflow d'analyse cellulaire : chaque étape produit un résultat qui devient l'entrée de l'étape suivante, jusqu'à un rapport final généré par intelligence artificielle.
+L'interface est organisée comme un vrai workflow d'analyse cellulaire : chaque étape produit un résultat qui devient l'entrée de l'étape suivante, jusqu'à un rapport final généré par intelligence artificielle et une classification ML sur données réelles.
 
 ---
 
@@ -48,16 +48,24 @@ Image microscopique
                       │
                       ▼
 ┌─────────────────────────────────────────────────────┐
-│  Étape 05 — Rapport d'analyse                       │
+│  Étape 05 — Rapport d'analyse           (M5)        │
 │  Résumé des 4 étapes · Statistiques comparées       │
-│  Comparaison avant/après · Bilan global             │
+│  Module C (k-means) · Module D (GLCM Haralick)      │
 └─────────────────────┬───────────────────────────────┘
                       │
                       ▼
 ┌─────────────────────────────────────────────────────┐
-│  Étape 06 — IA & Prédiction                         │
+│  Étape 06 — IA & Prédiction             (M6)        │
 │  Chat interactif · Identification type d'image      │
-│  Rapport médical · Suggestions d'amélioration       │
+│  Rapport médical · Contexte C+D injecté             │
+└─────────────────────┬───────────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────────────┐
+│  Étape 07 — ML / BloodMNIST             (M7)        │
+│  Random Forest from scratch (HOG + k-means NumPy)   │
+│  CNN PyTorch · 8 classes de cellules sanguines      │
+│  Matrice de confusion · Accuracy par classe         │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -76,9 +84,6 @@ Image microscopique
 | Filtre Moyenneur | Convolution avec noyau uniforme | Lissage rapide, prévisualisation |
 | Filtre Laplacien | Noyau `[[0,-1,0],[-1,4,-1],[0,-1,0]]` | Détecter membranes et filaments |
 
-**Recommandation automatique** : Poivre & Sel → filtre médian pré-sélectionné (badge vert). Bruit Gaussien → filtre gaussien.  
-**Affichage** : 3 panneaux — image originale | image bruitée | image filtrée.
-
 ---
 
 ### Module 2 — Histogramme (`core/histogram.py`)
@@ -89,9 +94,6 @@ Image microscopique
 | Étirement de contraste | `(I - min) / (max - min) × 255` | Corriger image pâle |
 | Égalisation | CDF : `T(r) = round((L-1) × CDF(r) / N)` | Révéler détails cachés (fluorescence) |
 | Seuillage binaire | `255 si I ≥ seuil, sinon 0` | Préparer la segmentation |
-
-**Statistiques** : min, max, moyenne, écart-type, entropie de Shannon (bits).  
-**Interprétation biologique** affichée automatiquement pour chaque opération.
 
 ---
 
@@ -108,13 +110,6 @@ apply_frequency_mask()— Masques circulaires passe-bas/haut/bande
 spectrum_image()      — Visualisation spectre (log scale)
 ```
 
-| Filtre | Rayon conseillé | Usage microscopique |
-|--------|-----------------|---------------------|
-| Spectre | — | Diagnostiquer artéfacts périodiques |
-| Passe-bas | R = 20–40 | Lisser bruit haute fréquence |
-| Passe-haut | R = 20–40 | Renforcer contours, détecter membranes |
-| Passe-bande | R = 15–30 | Isoler granules, séparer noyau/cytoplasme |
-
 ---
 
 ### Module 4 — Morphologie (`core/morpho.py`)
@@ -129,57 +124,90 @@ spectrum_image()      — Visualisation spectre (log scale)
 | Black Hat | `Closing(A) - A` | Détecter vacuoles et inclusions |
 | Gradient | `Dilate(A) - Erode(A)` | Tracer membranes cellulaires |
 
-**Comptage** : flood fill 4-connexe → nombre d'objets + aire moyenne en px².  
-**Rapport** : bouton "Générer rapport complet" → bilan de l'analyse.
+---
+
+### Module C — Classification cellulaire (`core/cell_classifier.py`)
+
+Analyse automatique lancée depuis M5 sur le résultat de M4 :
+
+| Composant | Détail |
+|-----------|--------|
+| Flood-fill | Détection d'objets 4-connexe from scratch |
+| Features | Aire, périmètre, circularité, intensité moyenne, écart-type |
+| K-means | Implémenté from scratch, k=3 clusters, 10 restarts |
+| PCA 2D | Projection from scratch pour scatter plot |
+| Labels | Noyau / Cytoplasme / Débris / Incertain (heuristique circularité) |
+
+---
+
+### Module D — Texture GLCM (`core/glcm.py`)
+
+Analyse de texture de Haralick lancée depuis M5 :
+
+| Composant | Détail |
+|-----------|--------|
+| Quantisation | 256 → 8 niveaux de gris |
+| GLCM | 4 directions (0°, 45°, 90°, 135°), distances [1, 2] |
+| Features | Contraste, Énergie, Homogénéité, Entropie, Corrélation, Dissimilarité |
+| Profil | Interprétation biologique automatique (fine/modérée/rugueuse) |
 
 ---
 
 ### Module 5 — Rapport d'analyse (`ui/report_panel.py`)
 
-Panel de synthèse automatique à la fin du pipeline :
-
-- **Comparaison visuelle** : image originale vs résultat final côte à côte
-- **Résumé des 4 étapes** : opération + paramètres + interprétation biologique par module
-- **Statistiques comparées** : tableau min/max/moyenne/écart-type/entropie à chaque étape
-- **Histogrammes comparés** : original vs résultat final
-- **Bilan global** : 4 métriques clés + interprétation textuelle automatique avec recommandations
-
-Se rafraîchit automatiquement à chaque navigation vers l'étape 05.
+- Comparaison visuelle originale vs résultat final
+- Résumé des 4 étapes avec paramètres et interprétations biologiques
+- **Carte Module C** : comptage noyaux / cytoplasme / débris, inertie k-means, variance PCA
+- **Carte Module D** : 6 features Haralick, profil texture, interprétation histologique
+- Bilan global : entropie, contraste, luminosité, objets détectés
 
 ---
 
 ### Module 6 — IA & Prédiction (`ui/ai_panel.py`)
 
-Chat interactif avec un LLM analysant les résultats du pipeline :
+Chat interactif avec LLM analysant les résultats du pipeline complet (M1→M4 + C + D) :
 
-**L'IA reçoit automatiquement :** toutes les statistiques, les paramètres utilisés, les logs de chaque module et les résultats de comptage cellulaire.
-
-**5 analyses rapides disponibles :**
+**7 analyses rapides disponibles :**
 - Analyser le pipeline complet
 - Identifier le type d'image biologique
-- Suggérer des améliorations
+- Interpréter la classification cellulaire (Module C)
+- Interpréter la texture GLCM (Module D)
 - Générer un rapport médical complet
+- Suggérer des améliorations
 - Évaluer la qualité du traitement
 
 **Fournisseurs supportés :**
 
-| Fournisseur | Modèle par défaut | Coût |
-|-------------|-------------------|------|
+| Fournisseur | Modèle | Coût |
+|-------------|--------|------|
 | OpenRouter (recommandé) | `arcee-ai/trinity-large-preview:free` | Gratuit |
 | Gemini Flash (Google) | `gemini-2.0-flash` | Gratuit (15 req/min) |
 | Claude (Anthropic) | `claude-haiku-4-5-20251001` | Payant |
 
-**Modèles gratuits OpenRouter** (une seule clé `sk-or-v1-...` pour tous) :
+---
 
-```
-arcee-ai/trinity-large-preview:free      ← recommandé, fonctionne bien
-meta-llama/llama-3.2-3b-instruct:free
-google/gemma-3-4b-it:free
-google/gemma-3-12b-it:free
-mistralai/mistral-small-3.1-24b-instruct:free
-qwen/qwen-2.5-72b-instruct:free
-deepseek/deepseek-r1:free
-```
+### Module 7 — ML / BloodMNIST (`core/m7_model.py` + `ui/m7_panel.py`)
+
+Classification de cellules sanguines sur le dataset **BloodMNIST** (17 092 images 28×28 RGB, 8 classes) :
+
+#### Branche A — Random Forest (from scratch, NumPy uniquement)
+
+| Composant | Détail |
+|-----------|--------|
+| Features | HOG from scratch (7×7 cellules, 9 orientations) + 10 stats globales = 451 dimensions |
+| Arbre | CART with Gini impurity, from scratch |
+| Forêt | Bootstrap sampling + random feature subsets (√d) |
+| Résultats | Accuracy globale, accuracy par classe, matrice de confusion 8×8 |
+
+#### Branche B — CNN (PyTorch)
+
+| Composant | Détail |
+|-----------|--------|
+| Architecture | Conv(3→16) + MaxPool + Conv(16→32) + MaxPool + Dense(1568→128) + Dense(128→8) |
+| Entraînement | Adam, CrossEntropyLoss, CPU, ~170k paramètres |
+| Résultats | Courbes loss/accuracy par epoch, accuracy par classe, matrice de confusion |
+
+**8 classes BloodMNIST :** Basophile · Éosinophile · Érythroblaste · Granulocyte imm. · Lymphocyte · Monocyte · Neutrophile · Plaquette
 
 ---
 
@@ -188,51 +216,34 @@ deepseek/deepseek-r1:free
 ```
 biovision_lab/
 │
-├── main.py                     # Point d'entrée
+├── main.py
 ├── requirements.txt
 │
 ├── app/
-│   ├── state.py                # AppState : pixels, logs M1-M4, steps_done[6]
-│   └── main_window.py          # Fenêtre principale + barre pipeline 6 étapes
+│   ├── state.py            # AppState : pixels, logs M1-M4, mc/md/m7 results, steps_done[7]
+│   └── main_window.py      # Fenêtre principale + barre pipeline 7 étapes
 │
-├── core/                       # Algorithmes purs — zéro tkinter, zéro OpenCV
+├── core/                   # Algorithmes purs — zéro tkinter, zéro OpenCV
 │   ├── histogram.py
 │   ├── filters.py
 │   ├── fft_manual.py
-│   └── morpho.py
+│   ├── morpho.py
+│   ├── cell_classifier.py  # Module C — k-means from scratch
+│   ├── glcm.py             # Module D — GLCM Haralick from scratch
+│   └── m7_model.py         # Module M7 — Random Forest + CNN PyTorch
 │
-├── ui/                         # Panels Tkinter
-│   ├── filter_panel.py         # M1
-│   ├── hist_panel.py           # M2
-│   ├── fourier_panel.py        # M3
-│   ├── morpho_panel.py         # M4
-│   ├── report_panel.py         # M5 — rapport synthèse
-│   └── ai_panel.py             # M6 — chat IA multi-fournisseurs
+├── ui/
+│   ├── filter_panel.py     # M1
+│   ├── hist_panel.py       # M2
+│   ├── fourier_panel.py    # M3
+│   ├── morpho_panel.py     # M4
+│   ├── report_panel.py     # M5 — rapport + cartes C et D
+│   ├── ai_panel.py         # M6 — chat IA multi-fournisseurs
+│   └── m7_panel.py         # M7 — interface RF + CNN BloodMNIST
 │
 └── assets/
     ├── guide_utilisation.docx
-    ├── README.docx
     └── samples/
-```
-
-### Règle de dépendance
-
-```
-main.py → app/main_window.py → ui/*_panel.py → core/*.py
-```
-
-`core/` ne contient **jamais** `import tkinter`. Le module IA utilise uniquement `urllib` (stdlib).
-
-### AppState — pipeline de données
-
-```python
-AppState
-├── original_pixels              # Image source
-├── m1_result / m2_result / m3_result / m4_result
-├── m1_log / m2_log / m3_log / m4_log   # Paramètres de chaque module
-└── steps_done[6]                # Flags de complétion
-
-pipeline_input(step)  # remonte automatiquement la meilleure entrée disponible
 ```
 
 ---
@@ -240,22 +251,24 @@ pipeline_input(step)  # remonte automatiquement la meilleure entrée disponible
 ## Installation
 
 ```bash
-# Prérequis : Python 3.8+
+# Dépendances de base
 pip install numpy pillow matplotlib
 
-# Lancer
-python main.py
+# Module M7 (optionnel)
+pip install medmnist torch
 ```
 
 ### Dépendances
 
-| Package | Usage | Version |
-|---------|-------|---------|
-| `numpy` | Base de tous les algorithmes | ≥ 1.20 |
-| `pillow` | Chargement et affichage images | ≥ 9.0 |
-| `matplotlib` | Histogramme M2 | ≥ 3.5 |
+| Package | Usage | Requis |
+|---------|-------|--------|
+| `numpy` | Base de tous les algorithmes | Oui |
+| `pillow` | Chargement et affichage images | Oui |
+| `matplotlib` | Histogramme M2 | Oui |
 | `tkinter` | Interface graphique | stdlib |
 | `urllib` | Appels API IA (M6) | stdlib |
+| `torch` | CNN M7 | M7 uniquement |
+| `medmnist` | Dataset BloodMNIST | M7 uniquement |
 
 ---
 
@@ -263,30 +276,13 @@ python main.py
 
 1. `python main.py`
 2. **"Charger un échantillon"** → PNG/JPG/TIFF
-3. **Étape 01** : choisir bruit → filtre recommandé s'active → Appliquer
+3. **Étape 01** : choisir bruit → filtre recommandé → Appliquer
 4. **Étape 02** : choisir opération → Calculer
 5. **Étape 03** : choisir filtre → Calculer FFT
-6. **Étape 04** : choisir opération morpho → Appliquer → voir comptage
-7. **Étape 05** : cliquer "Actualiser" → rapport synthèse
-8. **Étape 06** : entrer clé OpenRouter → analyses rapides IA
-
-### Obtenir une clé API gratuite (module IA)
-
-1. [openrouter.ai](https://openrouter.ai) → créer un compte
-2. **Keys** → **Create Key**
-3. Clé `sk-or-v1-...` → coller dans la sidebar Étape 06
-4. Une seule clé = accès à tous les modèles gratuits
-
-### Types d'images recommandées
-
-| Type | Format | Résolution |
-|------|--------|------------|
-| Coupes histologiques (HES, Giemsa) | PNG, TIFF | 512×512 à 1024×1024 |
-| Microscopie optique | PNG, JPG | 256×256 à 512×512 |
-| Fluorescence (DAPI, GFP) | TIFF, PNG | 512×512 |
-| Images bactériologiques | PNG, JPG | 256×256 à 512×512 |
-
-> ⚠️ Images > 2000 px : recadrer avant traitement (FFT très lente).
+6. **Étape 04** : opération morpho → Appliquer → comptage cellulaire
+7. **Étape 05** : "Actualiser" → rapport + analyse C (k-means) + D (GLCM)
+8. **Étape 06** : clé OpenRouter → analyses rapides IA
+9. **Étape 07** : "Charger BloodMNIST" → entraîner RF et/ou CNN
 
 ---
 
@@ -304,17 +300,11 @@ Erode  = min { A(x+i, y+j) | (i,j) ∈ B }          # érosion
 Dilate = max { A(x+i, y+j) | (i,j) ∈ B }          # dilatation
 TH(I) = I - Opening(I)                              # top hat
 H = -Σ p(i)·log₂(p(i))                             # entropie Shannon
+Circularity = 4π·Area / Perimeter²                 # circularité (Module C)
+GLCM(i,j) = P(i→j) normalisé sur 4 directions      # texture Haralick
+Gini(t) = 1 - Σ p_k²                               # impureté (Random Forest)
+HOG = histogramme orientations pondéré magnitude    # features M7
 ```
-
----
-
-## Documents
-
-| Fichier | Contenu |
-|---------|---------|
-| `assets/guide_utilisation.docx` | Guide complet avec scénarios biologiques |
-| `assets/README.docx` | Documentation Word |
-| `explication_algorithmes.pdf` | Explication ligne par ligne de chaque algorithme |
 
 ---
 
