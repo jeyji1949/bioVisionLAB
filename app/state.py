@@ -14,14 +14,17 @@ class AppState:
     m2_result: np.ndarray = field(default=None)
     m3_result: np.ndarray = field(default=None)
     m4_result: np.ndarray = field(default=None)
-    mc_results: object = field(default=None) 
+    mc_results: object = field(default=None)
+    md_results: object = field(default=None)
+    m7_rf_results:  object = field(default=None)
+    m7_cnn_results: object = field(default=None)
 
     m1_log: dict = field(default_factory=dict)
     m2_log: dict = field(default_factory=dict)
     m3_log: dict = field(default_factory=dict)
     m4_log: dict = field(default_factory=dict)
 
-    steps_done: list = field(default_factory=lambda: [False, False, False, False, False])
+    steps_done: list = field(default_factory=lambda: [False]*7)
     on_step_complete: object = field(default=None)
 
     def has_image(self):
@@ -42,13 +45,16 @@ class AppState:
         return self.original_pixels
 
     def reset(self):
-        self.m1_result = None
-        self.m2_result = None
-        self.m3_result = None
-        self.m4_result = None
-        self.mc_results = None
+        self.m1_result      = None
+        self.m2_result      = None
+        self.m3_result      = None
+        self.m4_result      = None
+        self.mc_results     = None
+        self.md_results     = None
+        self.m7_rf_results  = None
+        self.m7_cnn_results = None
         self.m1_log = {}
         self.m2_log = {}
         self.m3_log = {}
         self.m4_log = {}
-        self.steps_done = [False, False, False, False, False]
+        self.steps_done = [False]*7

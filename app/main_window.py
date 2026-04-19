@@ -11,6 +11,7 @@ from ui.fourier_panel import FourierPanel
 from ui.morpho_panel  import MorphoPanel
 from ui.report_panel  import ReportPanel
 from ui.ai_panel      import AiPanel
+from ui.m7_panel      import M7Panel
 
 BG        = "#F4F6F9"
 WHITE     = "#FFFFFF"
@@ -26,15 +27,17 @@ STEP_COLORS = [
     ("#C47A00", "#FDF4E3"),
     ("#C0393B", "#FBE9E9"),
     ("#1A6FBF", "#EBF3FB"),
-    ("#6C47CC", "#F0EDFB"),  # IA — violet
+    ("#6C47CC", "#F0EDFB"),
+    ("#0F6B3A", "#E6F4ED"),  # M7
 ]
 STEP_LABELS = [
-    ("01", "Prétraitement",  "Débruitage"),
-    ("02", "Histogramme",    "Contraste"),
-    ("03", "Fourier",        "Fréquentiel"),
-    ("04", "Morphologie",    "Segmentation"),
-    ("05", "Rapport",        "Interprétation"),
-    ("06", "IA",             "Prédiction"),
+    ("01", "Prétraitement",   "Débruitage"),
+    ("02", "Histogramme",     "Contraste"),
+    ("03", "Fourier",         "Fréquentiel"),
+    ("04", "Morphologie",     "Segmentation"),
+    ("05", "Rapport",         "Interprétation"),
+    ("06", "IA",              "Prédiction"),
+    ("07", "ML / BloodMNIST", "Classification"),
 ]
 
 
@@ -64,7 +67,6 @@ class MainWindow:
         s.configure("White.TFrame", background=WHITE)
 
     def _build(self):
-        # ── Header ─────────────────────────────────────────────────────────────
         hdr = tk.Frame(self.root, bg=WHITE, height=58)
         hdr.pack(fill="x")
         hdr.pack_propagate(False)
@@ -91,7 +93,6 @@ class MainWindow:
                   highlightbackground=BORDER, highlightthickness=1,
                   command=self._open_guide).pack(side="right", padx=4, pady=10)
 
-        # ── Pipeline bar ───────────────────────────────────────────────────────
         pipe_bar = tk.Frame(self.root, bg=WHITE, height=70)
         pipe_bar.pack(fill="x")
         pipe_bar.pack_propagate(False)
@@ -103,9 +104,8 @@ class MainWindow:
         for i, ((num, title, sub), (color, bg_lt)) in enumerate(
                 zip(STEP_LABELS, STEP_COLORS)):
             if i > 0:
-                tk.Frame(inner, bg=BORDER, width=26, height=1).pack(
+                tk.Frame(inner, bg=BORDER, width=18, height=1).pack(
                     side="left", pady=8)
-
             sf = tk.Frame(inner, bg=WHITE, cursor="hand2")
             sf.pack(side="left")
             sf.bind("<Button-1>", lambda e, idx=i: self._switch_step(idx))
@@ -113,7 +113,7 @@ class MainWindow:
 
             circle = tk.Label(sf, text=num, bg=bg_lt, fg=color,
                                font=("Helvetica", 10, "bold"), width=3, pady=2)
-            circle.pack(side="left", padx=(0, 6))
+            circle.pack(side="left", padx=(0, 4))
             circle.bind("<Button-1>", lambda e, idx=i: self._switch_step(idx))
 
             col = tk.Frame(sf, bg=WHITE)
@@ -121,26 +121,24 @@ class MainWindow:
             col.bind("<Button-1>", lambda e, idx=i: self._switch_step(idx))
 
             t_lbl = tk.Label(col, text=title, bg=WHITE, fg=TEXT,
-                              font=("Helvetica", 10, "bold"), anchor="w")
+                              font=("Helvetica", 9, "bold"), anchor="w")
             t_lbl.pack(anchor="w")
             t_lbl.bind("<Button-1>", lambda e, idx=i: self._switch_step(idx))
 
             s_lbl = tk.Label(col, text=sub, bg=WHITE, fg=TEXT3,
-                              font=("Helvetica", 8), anchor="w")
+                              font=("Helvetica", 7), anchor="w")
             s_lbl.pack(anchor="w")
             s_lbl.bind("<Button-1>", lambda e, idx=i: self._switch_step(idx))
 
-        # ── Step containers ────────────────────────────────────────────────────
         self.content = tk.Frame(self.root, bg=BG)
         self.content.pack(fill="both", expand=True)
 
         for PanelCls in [FilterPanel, HistPanel, FourierPanel,
-                         MorphoPanel, ReportPanel, AiPanel]:
+                         MorphoPanel, ReportPanel, AiPanel, M7Panel]:
             p = PanelCls(self.content, self.state)
             p.place(relx=0, rely=0, relwidth=1, relheight=1)
             self._panels.append(p)
 
-        # ── Status bar ─────────────────────────────────────────────────────────
         sb = tk.Frame(self.root, bg=WHITE, height=26)
         sb.pack(fill="x", side="bottom")
         sb.pack_propagate(False)
@@ -156,15 +154,12 @@ class MainWindow:
 
         self._switch_step(0)
 
-    # ── Navigation ─────────────────────────────────────────────────────────────
-
     def _switch_step(self, idx):
         self._active_step = idx
         self._panels[idx].lift()
-        if idx == 4:
-            self._panels[4].refresh_image()
-        if idx == 5:
-            self._panels[5].refresh_image()
+        for auto_idx in [4, 5, 6]:
+            if idx == auto_idx:
+                self._panels[auto_idx].refresh_image()
         for i, (sf, color, bg_lt) in enumerate(self._step_frames):
             active = (i == idx)
             sf.config(bg=bg_lt if active else WHITE)
@@ -182,8 +177,6 @@ class MainWindow:
         if idx + 1 < len(self._panels):
             self._panels[idx + 1].refresh_image()
 
-    # ── Guide ──────────────────────────────────────────────────────────────────
-
     def _open_guide(self):
         import os, sys, subprocess
         base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -200,8 +193,6 @@ class MainWindow:
                 subprocess.Popen(["xdg-open", path])
         except Exception:
             messagebox.showinfo("Guide", f"Ouvrir manuellement :\n{path}")
-
-    # ── Image loading ──────────────────────────────────────────────────────────
 
     def _load_image(self):
         path = filedialog.askopenfilename(
