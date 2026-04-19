@@ -4,6 +4,8 @@ from PIL import Image, ImageTk
 
 from core.histogram import image_stats
 from core.cell_classifier import CellClassifier, classifier_context_block
+from core.glcm import GLCMAnalyzer
+
 
 
 WHITE   = "#FFFFFF"
@@ -139,6 +141,11 @@ class ReportPanel(tk.Frame):
                 self.state.m4_result,
                 self.state.original_pixels
             )
+        # ── Module D — run GLCM texture analysis ─────────────────────────────────
+        src = self.state.m1_result if self.state.m1_result is not None \
+            else self.state.original_pixels
+        ana = GLCMAnalyzer(levels=8, distances=[1, 2])
+        self.state.md_results = ana.run(src)
 
         sf = self._sf
 
@@ -211,6 +218,11 @@ class ReportPanel(tk.Frame):
         if hasattr(self.state, "mc_results") and self.state.mc_results:
             self._section(sf, "Analyse cellulaire — Module C (k-means)")
             self._mc_card(sf, self.state.mc_results)
+        
+          # ── Module D — GLCM texture card ─────────────────────────────────────────
+        if hasattr(self.state, "md_results") and self.state.md_results:
+            self._section(sf, "Analyse de texture — Module D (GLCM Haralick)")
+            self._md_card(sf, self.state.md_results)
 
         # ── Bilan global ──────────────────────────────────────────────────────
         self._section(sf, "Bilan global")
@@ -329,6 +341,93 @@ class ReportPanel(tk.Frame):
                  bg=WHITE, fg=TEXT3,
                  font=("Helvetica", 8)).pack(anchor="w", padx=14, pady=6)
 
+    def _md_card(self, parent, results):
+        """Display Module D (GLCM Haralick) results in the report."""
+        C_MD  = "#C47A00"
+        C_MDL = "#FDF4E3"
+ 
+        f = results["features"]
+        card = tk.Frame(parent, bg=WHITE,
+                        highlightbackground=C_MD, highlightthickness=2)
+        card.pack(fill="x", padx=16, pady=(0, 10))
+ 
+        # ── Header ────────────────────────────────────────────────────────────
+        hdr = tk.Frame(card, bg=C_MDL, height=38)
+        hdr.pack(fill="x")
+        hdr.pack_propagate(False)
+        tk.Label(hdr,
+                 text="Texture GLCM — Haralick (from scratch)",
+                 bg=C_MDL, fg=C_MD,
+                 font=("Helvetica", 10, "bold")).pack(
+                     side="left", padx=14, pady=6)
+        tk.Label(hdr,
+                 text=(f"{results['levels']} niveaux · "
+                       f"distances {results['distances']} · "
+                       f"4 directions"),
+                 bg=C_MDL, fg=C_MD,
+                 font=("Helvetica", 9)).pack(side="right", padx=12)
+ 
+        # ── Profile badge ─────────────────────────────────────────────────────
+        badge = tk.Frame(card, bg=C_MDL)
+        badge.pack(fill="x", padx=14, pady=(6, 2))
+        tk.Label(badge,
+                 text=f"Profil : {results['profile']}",
+                 bg=C_MDL, fg=C_MD,
+                 font=("Helvetica", 10, "bold")).pack(side="left")
+ 
+        # ── Feature grid — 2 columns ─────────────────────────────────────────
+        body = tk.Frame(card, bg=WHITE)
+        body.pack(fill="x", padx=14, pady=(6, 4))
+        body.columnconfigure((0, 1), weight=1, uniform="md")
+ 
+        feature_rows = [
+            ("Contraste",     f['contrast'],
+             "Variation locale — élevé = texture rugueuse"),
+            ("Énergie",       f['energy'],
+             "Uniformité — élevé = texture homogène"),
+            ("Homogénéité",   f['homogeneity'],
+             "Similarité voisins — élevé = transitions douces"),
+            ("Entropie",      f['entropy'],
+             "Complexité — élevé = texture riche"),
+            ("Corrélation",   f['correlation'],
+             "Régularité directionnelle — élevé = motif répété"),
+            ("Dissimilarité", f['dissimilarity'],
+             "Différence linéaire — moins sensible que contraste"),
+        ]
+ 
+        for i, (label, value, tip) in enumerate(feature_rows):
+            col = i % 2
+            row = i // 2
+            row_bg = BG if col == 0 else WHITE
+            cell = tk.Frame(body, bg=row_bg)
+            cell.grid(row=row, column=col, sticky="ew",
+                      padx=(0 if col == 0 else 6, 6 if col == 0 else 0),
+                      pady=2)
+            cell.columnconfigure(1, weight=1)
+ 
+            tk.Label(cell, text=label, bg=row_bg, fg=TEXT3,
+                     font=("Helvetica", 8, "bold"),
+                     width=14, anchor="w").grid(
+                         row=0, column=0, padx=(8, 4), pady=4, sticky="w")
+            tk.Label(cell, text=str(value), bg=row_bg, fg=C_MD,
+                     font=("Helvetica", 9, "bold"),
+                     anchor="w").grid(
+                         row=0, column=1, padx=4, pady=4, sticky="w")
+            tk.Label(cell, text=tip, bg=row_bg, fg=TEXT2,
+                     font=("Helvetica", 7),
+                     anchor="w", wraplength=260).grid(
+                         row=1, column=0, columnspan=2,
+                         padx=(8, 8), pady=(0, 4), sticky="w")
+ 
+        # ── Interpretation ────────────────────────────────────────────────────
+        tk.Frame(card, bg=BORDER, height=1).pack(fill="x", padx=14)
+        tk.Label(card,
+                 text=results["profile_detail"],
+                 bg=WHITE, fg=TEXT2,
+                 font=("Helvetica", 8),
+                 anchor="w", justify="left",
+                 wraplength=900).pack(anchor="w", padx=14, pady=8)
+    
     def _global_card(self, parent):
         pix = self._best()
         if pix is None:

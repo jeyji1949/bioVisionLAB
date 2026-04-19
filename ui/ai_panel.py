@@ -7,6 +7,8 @@ import numpy as np
 import time
 
 from core.histogram import image_stats
+from core.cell_classifier import classifier_context_block
+from core.glcm import glcm_context_block
 
 WHITE   = "#FFFFFF"
 BG      = "#F4F6F9"
@@ -50,13 +52,16 @@ une application de traitement d'image développée dans le cadre du Master BIAM 
 (Bioinformatique et Intelligence Artificielle pour la Médecine de Précision).
 
 Tu reçois les données complètes d'un pipeline d'analyse d'image microscopique \
-comprenant 4 modules : Prétraitement (M1), Histogramme (M2), Fourier (M3), \
-Morphologie (M4). Tu dois :
+comprenant 6 modules : Prétraitement (M1), Histogramme (M2), Fourier (M3), \
+Morphologie (M4), Classification cellulaire k-means (Module C), \
+et Analyse de texture GLCM Haralick (Module D). Tu dois :
 1. Identifier le type probable d'image biologique selon les statistiques
 2. Interpréter les résultats de chaque module de façon biologique et clinique
-3. Évaluer la qualité du traitement appliqué
-4. Suggérer des améliorations concrètes si nécessaire
-5. Générer un rapport médical structuré et professionnel en français
+3. Relier la classification cellulaire (noyaux / cytoplasme / débris) aux données morphologiques
+4. Interpréter le profil de texture GLCM dans le contexte histologique
+5. Évaluer la qualité du traitement appliqué
+6. Suggérer des améliorations concrètes si nécessaire
+7. Générer un rapport médical structuré et professionnel en français
 
 Réponds toujours en français. Sois précis, professionnel, et adapte ton langage \
 au niveau Master en bioinformatique. Structure tes réponses avec des sections claires."""
@@ -105,6 +110,16 @@ def _build_context(state) -> str:
         s = image_stats(best)
         lines.append("--- Résultat final ---")
         lines.append(f"Entropie={s['entropy']} bits  Contraste={int(best.max())-int(best.min())} niveaux")
+
+    # ── Module C — Classification cellulaire k-means ──────────────────────────
+    if hasattr(state, "mc_results") and state.mc_results:
+        lines.append("")
+        lines.append(classifier_context_block(state.mc_results))
+
+    # ── Module D — Analyse de texture GLCM Haralick ───────────────────────────
+    if hasattr(state, "md_results") and state.md_results:
+        lines.append("")
+        lines.append(glcm_context_block(state.md_results))
 
     lines.append(f"\nModules complétés : {sum(state.steps_done[:4])}/4")
     return "\n".join(lines)
@@ -238,15 +253,23 @@ class AiPanel(tk.Frame):
             ("Identifier le type d'image",
              "En te basant sur les statistiques, quel type d'image biologique "
              "s'agit-il probablement ? (cellules, bactéries, tissu, fluorescence...)"),
-            ("Suggérer des améliorations",
-             "Analyse les paramètres et suggère des améliorations concrètes "
-             "pour optimiser la segmentation cellulaire."),
+            ("Interpréter la classification cellulaire",
+             "Analyse les résultats du Module C (k-means) : la composition "
+             "noyaux/cytoplasme/débris est-elle cohérente avec le type d'image ? "
+             "Que signifient ces proportions biologiquement ?"),
+            ("Interpréter la texture GLCM",
+             "Analyse le profil de texture Haralick (Module D) : que révèlent "
+             "les valeurs de contraste, énergie et homogénéité sur l'organisation "
+             "tissulaire de cette image ?"),
             ("Rapport médical complet",
              "Génère un rapport médical complet avec introduction, méthodes, "
-             "résultats et conclusion."),
+             "résultats (incluant classification cellulaire et texture) et conclusion."),
+            ("Suggérer des améliorations",
+             "Analyse les paramètres et suggère des améliorations concrètes "
+             "pour optimiser la segmentation et la classification cellulaire."),
             ("Évaluer la qualité",
              "Le bruit a-t-il été bien éliminé ? Le contraste est-il suffisant ? "
-             "La segmentation est-elle fiable ?"),
+             "La segmentation et la classification k-means sont-elles fiables ?"),
         ]
         for label, prompt in quick_prompts:
             btn = tk.Button(body, text=label, bg=BG, fg=ACCENT,
@@ -349,11 +372,12 @@ class AiPanel(tk.Frame):
         self._add_message("assistant",
             "Bonjour ! Je suis votre assistant IA spécialisé en analyse d'image "
             "microscopique.\n\n"
-            "Nouveau : choisissez votre fournisseur IA dans la sidebar :\n"
-            "• OpenRouter (gratuit, recommandé) — créer un compte sur openrouter.ai\n"
-            "• Gemini Flash (Google) — clé sur aistudio.google.com\n"
-            "• Claude (Anthropic) — clé sur console.anthropic.com\n\n"
-            "Entrez votre clé API puis utilisez un bouton d'analyse rapide.")
+            "Je dispose maintenant des résultats de 6 modules :\n"
+            "• M1–M4 : Prétraitement, Histogramme, Fourier, Morphologie\n"
+            "• Module C : Classification cellulaire k-means (noyaux / cytoplasme / débris)\n"
+            "• Module D : Analyse de texture GLCM Haralick\n\n"
+            "Choisissez votre fournisseur IA dans la sidebar, entrez votre clé API, "
+            "puis utilisez un bouton d'analyse rapide ou posez votre question.")
 
     def _add_message(self, role, text):
         is_ai  = (role == "assistant")
