@@ -246,6 +246,16 @@ class HistPanel(tk.Frame):
             v = stats.get(k, "—")
             lbl.config(text=str(v) + (" bits" if k == "entropy" else ""))
         self.interp_lbl.config(text=BIO_INTERP.get(op, "—"))
+        self.state.m2_log = {
+            "operation": op,
+            "bins":      bins,
+            "seuil":     self.thresh_var.get() if op == "threshold" else "—",
+            "min":       stats.get("min", "—"),
+            "max":       stats.get("max", "—"),
+            "mean":      stats.get("mean", "—"),
+            "std":       stats.get("std", "—"),
+            "entropy":   stats.get("entropy", "—"),
+        }
         self.state.mark_step(1)
 
     def _send_next(self):
