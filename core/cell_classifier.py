@@ -11,7 +11,7 @@ What it does (in plain terms)
 4. Groups similar objects together using k-means  (unsupervised ML)
 5. Labels each group as nucleus / cytoplasm / debris / uncertain
 
-How it connects to your existing code
+How it connects to code
 --------------------------------------
   Your morpho_panel._count_objects() returns (count, mean_area).
   This module does the same flood-fill but returns the full list of
